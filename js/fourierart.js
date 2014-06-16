@@ -2,7 +2,7 @@
 | Fourier Transform |
 |  Evolutionary Art |
 | @author Anthony   |
-| @version 0.1      |
+| @version 1.0      |
 | @date 2014/06/15  |
 | @edit 2014/06/15  |
 \*******************/
@@ -12,7 +12,11 @@
 var numcellsx = 3;
 var numcellsy = 2;
 var cellDim = 128;
-var dims = [cellDim*3, cellDim*2];
+var border = 16;
+var dims = [
+    cellDim*numcellsx + border*(numcellsx-1),
+    cellDim*numcellsy + border*(numcellsy-1)
+];
 
 /*************
  * constants */
@@ -31,16 +35,69 @@ function initFourierArt() {
     canvas.height = dims[1];
     ctx = canvas.getContext('2d');
 
+    pop = [new FTBeing(cellDim)];
+    for (var ai = 1; ai < numcellsx*numcellsy; ai++) {
+        pop.push(pop[0].mutate());
+    }
+    
+    //initial painting of the FTBeings
+    updateCanvas(pop);
 
-    var pop = [];
-    for (var ai = 0; ai < 3*2; ai++) {
-        pop.push(new FTBeing(cellDim));
-    }
-    for (var ai = 0; ai < 2; ai++) {
-        for (var bi = 0; bi < 3; bi++) {
-            pop[ai*3+bi].draw(ctx, bi*cellDim, ai*cellDim);
+    //event listeners
+    canvas.addEventListener('mousedown', function(e) {
+        var loc = getMousePos(canvas, e);
+        var celly = Math.floor(numcellsy*loc[1]/canvas.height);
+        var cellx = Math.floor(numcellsx*loc[0]/canvas.width);
+        var which = celly*numcellsx + cellx;
+        pop = [pop[which]];
+        for (var ai = 1; ai < numcellsy*numcellsx; ai++) {
+            pop.push(pop[0].mutate());
         }
-    }
+        updateCanvas(pop);
+    }, false);
+}
+
+function updateCanvas(generators) {
+    var ai = 0;
+    var asyncLoopYCells = function(callback) {
+        //outer loop work
+        var bi = 0;
+        var asyncLoopXCells = function(callback) {
+            //inner loop work
+            var which = ai*numcellsx + bi;
+            generators[which].draw(
+                ctx,
+                bi*cellDim + bi*border,
+                ai*cellDim + ai*border
+            );
+
+            bi += 1;
+            setTimeout(function() { callback(true); }, 6); 
+        };
+        asyncLoop(numcellsx,
+            function(loop) {
+                asyncLoopXCells(function(keepGoing) {
+                    if (keepGoing) loop.next();
+                    else loop.break();
+                })
+            }, 
+            function() { //inner loop finished
+                ai += 1;
+                setTimeout(function() { callback(true); }, 6); //call outer
+            }
+        );
+    };
+    asyncLoop(numcellsy,
+        function(loop) {
+            asyncLoopYCells(function(keepGoing) {
+                if (keepGoing) loop.next();
+                else loop.break();
+            })
+        },
+        function() { //outer loop finished
+            //
+        }
+    );
 }
 
 function invFFT(sig, transform) {
@@ -67,6 +124,14 @@ function rec_invFFT(sig, start, transform, offset, N, s) {
 
 /********************
  * helper functions */
+function getMousePos(elem, e) {
+    var rect = elem.getBoundingClientRect();
+    return [
+        e.clientX-rect.left, 
+        e.clientY-rect.top
+    ];
+}
+
 function cisExp(x) { //e^ix = cos x + i*sin x
     return new Complex(Math.cos(x), Math.sin(x));
 }
@@ -85,9 +150,35 @@ function round(n, places) {
     return Math.round(mult*n)/mult;
 }
 
+function asyncLoop(iterations, func, callback) {
+    var index = 0;
+    var done = false;
+    var loop = {
+        next: function() {
+            if (done) return;
+            if (index < iterations) {
+                index += 1;
+                func(loop);
+            } else {
+                done = true;
+                if (callback) callback();
+            }
+        },
+        iteration: function() {
+            return index - 1;
+        },
+        break: function() {
+            done = true;
+            if (callback) callback();
+        }
+    };
+    loop.next();
+    return loop;
+}
+
 /***********
  * objects */
-function FTBeing(dim) {
+function FTBeing(dim, precomp_h_hats) {
     this.N = dim, this.M = dim;
     this.r = 4;
     this.maxMag = 1000*1000;
@@ -95,16 +186,21 @@ function FTBeing(dim) {
 
     //generate random Fourier weightings
     this.h_hats = [];
-    for (var n = 0; n < this.N; n++) {
-        for (var m = 0; m < this.M; m++) {
-            var dist2 = Math.pow(n-this.N/2, 2)+Math.pow(m-this.M/2, 2);
-            if (dist2 < this.r*this.r) {
-                var h_hat = this.getRandFourierCoeff(Math.sqrt(dist2));
-                this.h_hats.push(h_hat);
-            } else {
-                this.h_hats.push(new Complex(0, 0));
+    if (arguments.length < 2) {
+        for (var n = 0; n < this.N; n++) {
+            for (var m = 0; m < this.M; m++) {
+                var dist2 = Math.pow(n-this.N/2, 2);
+                    dist2 += Math.pow(m-this.M/2, 2);
+                if (dist2 < this.r*this.r) {
+                    var h_hat = this.getRandFourierCoeff(Math.sqrt(dist2));
+                    this.h_hats.push(h_hat);
+                } else {
+                    this.h_hats.push(new Complex(0, 0));
+                }
             }
         }
+    } else {
+        this.h_hats = precomp_h_hats;
     }
 
     //the h primes will be computed when they're needed
@@ -131,19 +227,21 @@ FTBeing.prototype.computeHPrimes = function() {
     };
 };
 FTBeing.prototype.mutate = function() {
+    var new_h_hats = [];
     //change the Fourier coefficients
     for (var n = 0; n < this.N; n++) {
         for (var m = 0; m < this.M; m++) {
             var dist2 = Math.pow(n-this.N/2, 2)+Math.pow(m-this.M/2, 2);
+            var idx = n*this.M + m;
             if (dist2 < this.r*this.r && Math.random() < this.mutRate) {
-                var idx = n*this.M + m;
                 var new_h_hat = this.getRandFourierCoeff(Math.sqrt(dist2));
-                this.h_hats[idx] = new_h_hat;
+                new_h_hats.push(new_h_hat);
+            } else {
+                new_h_hats.push(this.h_hats[idx]);
             }
         }
     }
-
-    this.computeHPrimes();
+    return new FTBeing(this.N, new_h_hats); //N and M should be the same
 };
 FTBeing.prototype.draw = function(context, x, y) { //(x,y) is the top left corner
     if (!this.h_()) this.computeHPrimes();
