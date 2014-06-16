@@ -10,7 +10,7 @@
 /**********
  * config */
 var numcellsx = 3;
-var numcellsy = 2;
+var numcellsy = 3;
 var cellDim = 128;
 var border = 16;
 var dims = [

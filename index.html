@@ -4,9 +4,35 @@
         <meta charset="UTF-8">
         <title>Fourier Transform Evolutionary Art</title>
 
+        <style>
+        #container {
+            width: 800px;
+            margin: 0px auto;
+        }
+
+        #container p {
+            font-size: 24px;
+        }
+
+        #canvas-container {
+            text-align: center;
+        }
+        </style>
+
         <script src="js/fourierart.js"></script>
     </head>
     <body>
-        <canvas id="canvas"></canvas>
+        <div id="container">
+            <h1>The Fourier Transform - Evolutionary Art</h1>
+            <p>
+                Click on your favorite picture. Avoid clicking the top left image
+                whenever possible to maximize diversity. The image you click is
+                placed in the top left corner and used as a seed to generate
+                all the other images.
+            </p>
+            <div id="canvas-container">
+                <canvas id="canvas"></canvas>
+            </div>
+        </div>
     </body>
 </html>
