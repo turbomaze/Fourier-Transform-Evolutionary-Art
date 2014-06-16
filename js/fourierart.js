@@ -12,7 +12,11 @@
 var numcellsx = 3;
 var numcellsy = 2;
 var cellDim = 128;
-var dims = [cellDim*numcellsx, cellDim*numcellsy];
+var border = 16;
+var dims = [
+    cellDim*numcellsx + border*(numcellsx-1),
+    cellDim*numcellsy + border*(numcellsy-1)
+];
 
 /*************
  * constants */
@@ -47,7 +51,12 @@ function updateCanvas(generators) {
         var asyncLoopXCells = function(callback) {
             //inner loop work
             var which = ai*numcellsx + bi;
-            generators[which].draw(ctx, bi*cellDim, ai*cellDim);
+            generators[which].draw(
+                ctx,
+                bi*cellDim + bi*border,
+                ai*cellDim + ai*border
+            );
+
             bi += 1;
             setTimeout(function() { callback(true); }, 6); 
         };
