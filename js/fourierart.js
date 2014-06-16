@@ -10,8 +10,9 @@
 /**********
  * config */
 var dims = [256, 256];
-var radius = 4;
+var radius = 5;
 var maxMagnitude = 2*1000*1000;
+var mutRate = 0.05;
 
 /*************
  * constants */
@@ -19,7 +20,8 @@ var maxMagnitude = 2*1000*1000;
 /*********************
  * working variables */
 var canvas, ctx;
-var h_;
+var h_hats;
+var $h, h_;
 
 /******************
  * work functions */
@@ -27,13 +29,7 @@ function initFourierArt() {
     //event listeners
     $s('#random-pic-btn').addEventListener('click', function() {
         //generate random Fourier weightings
-        function getRandFourierCoeff() {
-            var r = maxMagnitude*Math.random();
-            var theta = 2*Math.PI*Math.random();
-            return new Complex(r*Math.cos(theta), r*Math.sin(theta));
-        }
-
-        var h_hats = [];
+        h_hats = [];
         var N = dims[1], M = dims[0];
         for (var n = 0; n < N; n++) {
             for (var m = 0; m < M; m++) {
@@ -46,38 +42,73 @@ function initFourierArt() {
             }
         }
 
-        //invert the artificial Fourier transform
-        var h_primes = [];
-        invFFT(h_primes, h_hats);
-
-        //store them in a nice function to match the math
-        h_ = function(n, m) {
-            if (arguments.length === 0) return h_primes;
+        //store the Fourier weights in a nice function
+        $h = function(n, m) {
+            if (arguments.length === 0) return h_hats;
 
             var idx = n*dims[0] + m;
-            var val = round(h_primes[idx], 2);
-            return Math.max(0, Math.min(255, val));
+            return h_hats[idx];
         };
 
-        //draw the pixels
-        var currImageData = ctx.getImageData(0, 0, dims[0], dims[1]);
-        for (var n = 0; n < dims[1]; n++) {
-            for (var m = 0; m < dims[0]; m++) {
-                var idxInPixels = 4*(dims[0]*n + m);
-                currImageData.data[idxInPixels+3] = 255; //full alpha
-                for (var c = 0; c < 3; c++) { //RGB are the same, lol c++
-                    currImageData.data[idxInPixels+c] = h_(n, m);
+        reconstructFromTransform();
+    });
+
+    $s('#morph-btn').addEventListener('click', function() {
+        if (!$h()) {
+            return alert('Generate an image first.');
+        }
+
+        var N = dims[1], M = dims[0];
+        for (var n = 0; n < N; n++) {
+            for (var m = 0; m < M; m++) {
+                var dist2 = Math.pow(n-N/2, 2)+Math.pow(m-M/2, 2);
+                if (dist2 < radius*radius && Math.random() < mutRate) {
+                    var idx = n*M + m;
+                    h_hats[idx] = getRandFourierCoeff();
                 }
             }
         }
-        ctx.putImageData(currImageData, 0, 0);
+
+        reconstructFromTransform();
     });
+
+
 
     //initialize working variables
     canvas = $s('#canvas');
     canvas.width = dims[0];
     canvas.height = dims[1];
     ctx = canvas.getContext('2d');
+    h_hats = [];
+    $h = h_ = function() { return false; };
+}
+
+function reconstructFromTransform() {
+    //invert the artificial Fourier transform
+    var h_primes = [];
+    invFFT(h_primes, $h());
+
+    //store them in a nice function to match the math
+    h_ = function(n, m) {
+        if (arguments.length === 0) return h_primes;
+
+        var idx = n*dims[0] + m;
+        var val = round(h_primes[idx], 2);
+        return Math.max(0, Math.min(255, val));
+    };
+
+    //draw the pixels
+    var currImageData = ctx.getImageData(0, 0, dims[0], dims[1]);
+    for (var n = 0; n < dims[1]; n++) {
+        for (var m = 0; m < dims[0]; m++) {
+            var idxInPixels = 4*(dims[0]*n + m);
+            currImageData.data[idxInPixels+3] = 255; //full alpha
+            for (var c = 0; c < 3; c++) { //RGB are the same, lol c++
+                currImageData.data[idxInPixels+c] = h_(n, m);
+            }
+        }
+    }
+    ctx.putImageData(currImageData, 0, 0);
 }
 
 function invFFT(sig, transform) {
@@ -103,6 +134,12 @@ function rec_invFFT(sig, start, transform, offset, N, s) {
 
 /********************
  * helper functions */
+function getRandFourierCoeff() {
+    var r = maxMagnitude*Math.random();
+    var theta = 2*Math.PI*Math.random();
+    return new Complex(r*Math.cos(theta), r*Math.sin(theta));
+}
+
 function cisExp(x) { //e^ix = cos x + i*sin x
     return new Complex(Math.cos(x), Math.sin(x));
 }
