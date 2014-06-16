@@ -2,7 +2,7 @@
 | Fourier Transform |
 |  Evolutionary Art |
 | @author Anthony   |
-| @version 0.1      |
+| @version 1.0      |
 | @date 2014/06/15  |
 | @edit 2014/06/15  |
 \*******************/
