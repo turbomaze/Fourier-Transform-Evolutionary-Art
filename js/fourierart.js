@@ -9,10 +9,10 @@
 
 /**********
  * config */
-var dims = [256, 256];
-var radius = 5;
-var maxMagnitude = 2*1000*1000;
-var mutRate = 0.05;
+var numcellsx = 3;
+var numcellsy = 2;
+var cellDim = 128;
+var dims = [cellDim*3, cellDim*2];
 
 /*************
  * constants */
@@ -20,95 +20,27 @@ var mutRate = 0.05;
 /*********************
  * working variables */
 var canvas, ctx;
-var h_hats;
-var $h, h_;
+var pop;
 
 /******************
  * work functions */
 function initFourierArt() {
-    //event listeners
-    $s('#random-pic-btn').addEventListener('click', function() {
-        //generate random Fourier weightings
-        h_hats = [];
-        var N = dims[1], M = dims[0];
-        for (var n = 0; n < N; n++) {
-            for (var m = 0; m < M; m++) {
-                var dist2 = Math.pow(n-N/2, 2)+Math.pow(m-M/2, 2);
-                if (dist2 < radius*radius) {
-                    h_hats.push(getRandFourierCoeff());
-                } else {
-                    h_hats.push(new Complex(0, 0));
-                }
-            }
-        }
-
-        //store the Fourier weights in a nice function
-        $h = function(n, m) {
-            if (arguments.length === 0) return h_hats;
-
-            var idx = n*dims[0] + m;
-            return h_hats[idx];
-        };
-
-        reconstructFromTransform();
-    });
-
-    $s('#morph-btn').addEventListener('click', function() {
-        if (!$h()) {
-            return alert('Generate an image first.');
-        }
-
-        var N = dims[1], M = dims[0];
-        for (var n = 0; n < N; n++) {
-            for (var m = 0; m < M; m++) {
-                var dist2 = Math.pow(n-N/2, 2)+Math.pow(m-M/2, 2);
-                if (dist2 < radius*radius && Math.random() < mutRate) {
-                    var idx = n*M + m;
-                    h_hats[idx] = getRandFourierCoeff();
-                }
-            }
-        }
-
-        reconstructFromTransform();
-    });
-
-
-
     //initialize working variables
     canvas = $s('#canvas');
     canvas.width = dims[0];
     canvas.height = dims[1];
     ctx = canvas.getContext('2d');
-    h_hats = [];
-    $h = h_ = function() { return false; };
-}
 
-function reconstructFromTransform() {
-    //invert the artificial Fourier transform
-    var h_primes = [];
-    invFFT(h_primes, $h());
 
-    //store them in a nice function to match the math
-    h_ = function(n, m) {
-        if (arguments.length === 0) return h_primes;
-
-        var idx = n*dims[0] + m;
-        var val = round(h_primes[idx], 2);
-        return Math.max(0, Math.min(255, val));
-    };
-
-    //draw the pixels
-    var currImageData = ctx.getImageData(0, 0, dims[0], dims[1]);
-    for (var n = 0; n < dims[1]; n++) {
-        for (var m = 0; m < dims[0]; m++) {
-            var idxInPixels = 4*(dims[0]*n + m);
-            currImageData.data[idxInPixels+3] = 255; //full alpha
-            for (var c = 0; c < 3; c++) { //RGB are the same, lol c++
-                currImageData.data[idxInPixels+c] = h_(n, m);
-            }
+    var pop = [];
+    for (var ai = 0; ai < 3*2; ai++) {
+        pop.push(new FTBeing(cellDim));
+    }
+    for (var ai = 0; ai < 2; ai++) {
+        for (var bi = 0; bi < 3; bi++) {
+            pop[ai*3+bi].draw(ctx, bi*cellDim, ai*cellDim);
         }
     }
-    ctx.putImageData(currImageData, 0, 0);
 }
 
 function invFFT(sig, transform) {
@@ -117,6 +49,7 @@ function invFFT(sig, transform) {
         sig[ai] = sig[ai].real/sig.length;
     }
 }
+
 function rec_invFFT(sig, start, transform, offset, N, s) {
     if (N === 1) {
         sig[start] = transform[offset];
@@ -134,12 +67,6 @@ function rec_invFFT(sig, start, transform, offset, N, s) {
 
 /********************
  * helper functions */
-function getRandFourierCoeff() {
-    var r = maxMagnitude*Math.random();
-    var theta = 2*Math.PI*Math.random();
-    return new Complex(r*Math.cos(theta), r*Math.sin(theta));
-}
-
 function cisExp(x) { //e^ix = cos x + i*sin x
     return new Complex(Math.cos(x), Math.sin(x));
 }
@@ -160,6 +87,81 @@ function round(n, places) {
 
 /***********
  * objects */
+function FTBeing(dim) {
+    this.N = dim, this.M = dim;
+    this.r = 4;
+    this.maxMag = 1000*1000;
+    this.mutRate = 0.05;
+
+    //generate random Fourier weightings
+    this.h_hats = [];
+    for (var n = 0; n < this.N; n++) {
+        for (var m = 0; m < this.M; m++) {
+            var dist2 = Math.pow(n-this.N/2, 2)+Math.pow(m-this.M/2, 2);
+            if (dist2 < this.r*this.r) {
+                var h_hat = this.getRandFourierCoeff(Math.sqrt(dist2));
+                this.h_hats.push(h_hat);
+            } else {
+                this.h_hats.push(new Complex(0, 0));
+            }
+        }
+    }
+
+    //the h primes will be computed when they're needed
+    this.h_ = function() { return false; };
+}
+FTBeing.prototype.getRandFourierCoeff = function(d) {
+    var f = d === 0 ? this.r : this.r/d;
+    var radius = f*this.maxMag*Math.random();
+    var theta = 2*Math.PI*Math.random();
+    var ret = new Complex(radius*Math.cos(theta), radius*Math.sin(theta));
+    return ret;
+};
+FTBeing.prototype.computeHPrimes = function() {
+    var h_primes = [];
+    invFFT(h_primes, this.h_hats);
+
+    //store them in a nice function to match the math
+    this.h_ = function(n, m) {
+        if (arguments.length === 0) return h_primes;
+
+        var idx = n*this.M + m;
+        var val = round(h_primes[idx], 2);
+        return Math.max(0, Math.min(255, val));
+    };
+};
+FTBeing.prototype.mutate = function() {
+    //change the Fourier coefficients
+    for (var n = 0; n < this.N; n++) {
+        for (var m = 0; m < this.M; m++) {
+            var dist2 = Math.pow(n-this.N/2, 2)+Math.pow(m-this.M/2, 2);
+            if (dist2 < this.r*this.r && Math.random() < this.mutRate) {
+                var idx = n*this.M + m;
+                var new_h_hat = this.getRandFourierCoeff(Math.sqrt(dist2));
+                this.h_hats[idx] = new_h_hat;
+            }
+        }
+    }
+
+    this.computeHPrimes();
+};
+FTBeing.prototype.draw = function(context, x, y) { //(x,y) is the top left corner
+    if (!this.h_()) this.computeHPrimes();
+
+    var cw = context.canvas.width, ch = context.canvas.height;
+    var currImageData = context.getImageData(0, 0, cw, ch);
+    for (var n = 0; n < this.N; n++) {
+        for (var m = 0; m < this.M; m++) {
+            var idx = 4*(cw*(n+y) + (m+x));
+            currImageData.data[idx+3] = 255; //full alpha
+            for (var c = 0; c < 3; c++) { //RGB are the same, lol c++
+                currImageData.data[idx+c] = this.h_(n, m);
+            }
+        }
+    }
+    context.putImageData(currImageData, 0, 0);
+}
+
 function Complex(re, im) {
     this.real = re;
     this.imag = im;
