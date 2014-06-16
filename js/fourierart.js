@@ -31,9 +31,9 @@ function initFourierArt() {
     canvas.height = dims[1];
     ctx = canvas.getContext('2d');
 
-    pop = [];
-    for (var ai = 0; ai < numcellsx*numcellsy; ai++) {
-        pop.push(new FTBeing(cellDim));
+    pop = [new FTBeing(cellDim)];
+    for (var ai = 1; ai < numcellsx*numcellsy; ai++) {
+        pop.push(pop[0].mutate());
     }
     
     updateCanvas(pop);
@@ -147,7 +147,7 @@ function asyncLoop(iterations, func, callback) {
 
 /***********
  * objects */
-function FTBeing(dim) {
+function FTBeing(dim, precomp_h_hats) {
     this.N = dim, this.M = dim;
     this.r = 4;
     this.maxMag = 1000*1000;
@@ -155,16 +155,21 @@ function FTBeing(dim) {
 
     //generate random Fourier weightings
     this.h_hats = [];
-    for (var n = 0; n < this.N; n++) {
-        for (var m = 0; m < this.M; m++) {
-            var dist2 = Math.pow(n-this.N/2, 2)+Math.pow(m-this.M/2, 2);
-            if (dist2 < this.r*this.r) {
-                var h_hat = this.getRandFourierCoeff(Math.sqrt(dist2));
-                this.h_hats.push(h_hat);
-            } else {
-                this.h_hats.push(new Complex(0, 0));
+    if (arguments.length < 2) {
+        for (var n = 0; n < this.N; n++) {
+            for (var m = 0; m < this.M; m++) {
+                var dist2 = Math.pow(n-this.N/2, 2);
+                    dist2 += Math.pow(m-this.M/2, 2);
+                if (dist2 < this.r*this.r) {
+                    var h_hat = this.getRandFourierCoeff(Math.sqrt(dist2));
+                    this.h_hats.push(h_hat);
+                } else {
+                    this.h_hats.push(new Complex(0, 0));
+                }
             }
         }
+    } else {
+        this.h_hats = precomp_h_hats;
     }
 
     //the h primes will be computed when they're needed
@@ -191,19 +196,21 @@ FTBeing.prototype.computeHPrimes = function() {
     };
 };
 FTBeing.prototype.mutate = function() {
+    var new_h_hats = [];
     //change the Fourier coefficients
     for (var n = 0; n < this.N; n++) {
         for (var m = 0; m < this.M; m++) {
             var dist2 = Math.pow(n-this.N/2, 2)+Math.pow(m-this.M/2, 2);
+            var idx = n*this.M + m;
             if (dist2 < this.r*this.r && Math.random() < this.mutRate) {
-                var idx = n*this.M + m;
                 var new_h_hat = this.getRandFourierCoeff(Math.sqrt(dist2));
-                this.h_hats[idx] = new_h_hat;
+                new_h_hats.push(new_h_hat);
+            } else {
+                new_h_hats.push(this.h_hats[idx]);
             }
         }
     }
-
-    this.computeHPrimes();
+    return new FTBeing(this.N, new_h_hats); //N and M should be the same
 };
 FTBeing.prototype.draw = function(context, x, y) { //(x,y) is the top left corner
     if (!this.h_()) this.computeHPrimes();
