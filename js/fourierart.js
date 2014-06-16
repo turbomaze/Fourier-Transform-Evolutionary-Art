@@ -12,7 +12,7 @@
 var numcellsx = 3;
 var numcellsy = 2;
 var cellDim = 128;
-var dims = [cellDim*3, cellDim*2];
+var dims = [cellDim*numcellsx, cellDim*numcellsy];
 
 /*************
  * constants */
@@ -31,16 +31,50 @@ function initFourierArt() {
     canvas.height = dims[1];
     ctx = canvas.getContext('2d');
 
-
-    var pop = [];
-    for (var ai = 0; ai < 3*2; ai++) {
+    pop = [];
+    for (var ai = 0; ai < numcellsx*numcellsy; ai++) {
         pop.push(new FTBeing(cellDim));
     }
-    for (var ai = 0; ai < 2; ai++) {
-        for (var bi = 0; bi < 3; bi++) {
-            pop[ai*3+bi].draw(ctx, bi*cellDim, ai*cellDim);
+    
+    updateCanvas(pop);
+}
+
+function updateCanvas(generators) {
+    var ai = 0;
+    var asyncLoopYCells = function(callback) {
+        //outer loop work
+        var bi = 0;
+        var asyncLoopXCells = function(callback) {
+            //inner loop work
+            var which = ai*numcellsx + bi;
+            generators[which].draw(ctx, bi*cellDim, ai*cellDim);
+            bi += 1;
+            setTimeout(function() { callback(true); }, 6); 
+        };
+        asyncLoop(numcellsx,
+            function(loop) {
+                asyncLoopXCells(function(keepGoing) {
+                    if (keepGoing) loop.next();
+                    else loop.break();
+                })
+            }, 
+            function() { //inner loop finished
+                ai += 1;
+                setTimeout(function() { callback(true); }, 6); //call outer
+            }
+        );
+    };
+    asyncLoop(numcellsy,
+        function(loop) {
+            asyncLoopYCells(function(keepGoing) {
+                if (keepGoing) loop.next();
+                else loop.break();
+            })
+        },
+        function() { //outer loop finished
+            //
         }
-    }
+    );
 }
 
 function invFFT(sig, transform) {
@@ -83,6 +117,32 @@ function getRandInt(low, high) { //output is in [low, high)
 function round(n, places) {
     var mult = Math.pow(10, places);
     return Math.round(mult*n)/mult;
+}
+
+function asyncLoop(iterations, func, callback) {
+    var index = 0;
+    var done = false;
+    var loop = {
+        next: function() {
+            if (done) return;
+            if (index < iterations) {
+                index += 1;
+                func(loop);
+            } else {
+                done = true;
+                if (callback) callback();
+            }
+        },
+        iteration: function() {
+            return index - 1;
+        },
+        break: function() {
+            done = true;
+            if (callback) callback();
+        }
+    };
+    loop.next();
+    return loop;
 }
 
 /***********
