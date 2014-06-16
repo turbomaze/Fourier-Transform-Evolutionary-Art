@@ -40,7 +40,21 @@ function initFourierArt() {
         pop.push(pop[0].mutate());
     }
     
+    //initial painting of the FTBeings
     updateCanvas(pop);
+
+    //event listeners
+    canvas.addEventListener('mousedown', function(e) {
+        var loc = getMousePos(canvas, e);
+        var celly = Math.floor(numcellsy*loc[1]/canvas.height);
+        var cellx = Math.floor(numcellsx*loc[0]/canvas.width);
+        var which = celly*numcellsx + cellx;
+        pop = [pop[which]];
+        for (var ai = 1; ai < numcellsy*numcellsx; ai++) {
+            pop.push(pop[0].mutate());
+        }
+        updateCanvas(pop);
+    }, false);
 }
 
 function updateCanvas(generators) {
@@ -110,6 +124,14 @@ function rec_invFFT(sig, start, transform, offset, N, s) {
 
 /********************
  * helper functions */
+function getMousePos(elem, e) {
+    var rect = elem.getBoundingClientRect();
+    return [
+        e.clientX-rect.left, 
+        e.clientY-rect.top
+    ];
+}
+
 function cisExp(x) { //e^ix = cos x + i*sin x
     return new Complex(Math.cos(x), Math.sin(x));
 }
