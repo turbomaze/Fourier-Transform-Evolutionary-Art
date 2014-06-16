@@ -183,19 +183,25 @@ function FTBeing(dim, precomp_h_hats) {
     this.r = 4;
     this.maxMag = 1000*1000;
     this.mutRate = 0.05;
+    this.numChannels = 1;
 
     //generate random Fourier weightings
     this.h_hats = [];
     if (arguments.length < 2) {
-        for (var n = 0; n < this.N; n++) {
-            for (var m = 0; m < this.M; m++) {
-                var dist2 = Math.pow(n-this.N/2, 2);
-                    dist2 += Math.pow(m-this.M/2, 2);
-                if (dist2 < this.r*this.r) {
-                    var h_hat = this.getRandFourierCoeff(Math.sqrt(dist2));
-                    this.h_hats.push(h_hat);
-                } else {
-                    this.h_hats.push(new Complex(0, 0));
+        for (var ai = 0; ai < this.numChannels; ai++) {
+            this.h_hats.push([]);
+            for (var n = 0; n < this.N; n++) {
+                for (var m = 0; m < this.M; m++) {
+                    var dist2 = Math.pow(n-this.N/2, 2);
+                        dist2 += Math.pow(m-this.M/2, 2);
+                    if (dist2 < this.r*this.r) {
+                        var h_hat = this.getRandFourierCoeff(
+                            Math.sqrt(dist2)
+                        );
+                        this.h_hats[ai].push(h_hat);
+                    } else {
+                        this.h_hats[ai].push(new Complex(0, 0));
+                    }
                 }
             }
         }
@@ -215,29 +221,38 @@ FTBeing.prototype.getRandFourierCoeff = function(d) {
 };
 FTBeing.prototype.computeHPrimes = function() {
     var h_primes = [];
-    invFFT(h_primes, this.h_hats);
+    for (var ai = 0; ai < this.numChannels; ai++) {
+        h_primes.push([]);
+        invFFT(h_primes[ai], this.h_hats[ai]);
+    }
 
     //store them in a nice function to match the math
-    this.h_ = function(n, m) {
+    this.h_ = function(which, n, m) {
         if (arguments.length === 0) return h_primes;
+        if (arguments.length === 1) return h_primes[which];
 
         var idx = n*this.M + m;
-        var val = round(h_primes[idx], 2);
+        var val = round(h_primes[which][idx], 2);
         return Math.max(0, Math.min(255, val));
     };
 };
 FTBeing.prototype.mutate = function() {
     var new_h_hats = [];
-    //change the Fourier coefficients
-    for (var n = 0; n < this.N; n++) {
-        for (var m = 0; m < this.M; m++) {
-            var dist2 = Math.pow(n-this.N/2, 2)+Math.pow(m-this.M/2, 2);
-            var idx = n*this.M + m;
-            if (dist2 < this.r*this.r && Math.random() < this.mutRate) {
-                var new_h_hat = this.getRandFourierCoeff(Math.sqrt(dist2));
-                new_h_hats.push(new_h_hat);
-            } else {
-                new_h_hats.push(this.h_hats[idx]);
+    for (var ai = 0; ai < this.numChannels; ai++) {
+        new_h_hats.push([]);
+        //change the Fourier coefficients
+        for (var n = 0; n < this.N; n++) {
+            for (var m = 0; m < this.M; m++) {
+                var dist2 = Math.pow(n-this.N/2, 2)+Math.pow(m-this.M/2, 2);
+                var idx = n*this.M + m;
+                if (dist2 < this.r*this.r && Math.random() < this.mutRate) {
+                    var new_h_hat = this.getRandFourierCoeff(
+                        Math.sqrt(dist2)
+                    );
+                    new_h_hats[ai].push(new_h_hat);
+                } else {
+                    new_h_hats[ai].push(this.h_hats[ai][idx]);
+                }
             }
         }
     }
@@ -251,14 +266,26 @@ FTBeing.prototype.draw = function(context, x, y) { //(x,y) is the top left corne
     for (var n = 0; n < this.N; n++) {
         for (var m = 0; m < this.M; m++) {
             var idx = 4*(cw*(n+y) + (m+x));
-            currImageData.data[idx+3] = 255; //full alpha
+            
+            //get a cool color from all the channels
+            var params = [];
+            for (var ai = 0; ai < this.numChannels; ai++) {
+                params.push(this.h_(ai, n, m));
+            } 
+            var color = this.getColor(params);
+
+            //put the color on the screen
             for (var c = 0; c < 3; c++) { //RGB are the same, lol c++
-                currImageData.data[idx+c] = this.h_(n, m);
+                currImageData.data[idx+c] = color[c];
             }
+            currImageData.data[idx+3] = 255; //full alpha
         }
     }
     context.putImageData(currImageData, 0, 0);
 }
+FTBeing.prototype.getColor = function(params) {
+    return [params[0], params[0], params[0]];
+};
 
 function Complex(re, im) {
     this.real = re;
